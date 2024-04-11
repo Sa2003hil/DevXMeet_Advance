@@ -36,6 +36,10 @@ class PeerService {
       return offer;
     }
   }
+
+  close() {
+    this.peer.close();
+  }
 }
 
 export default new PeerService();

@@ -2,9 +2,11 @@ import React, { useEffect, useCallback, useState } from "react";
 import ReactPlayer from "react-player";
 import peer from "../service/peer";
 import { useSocket } from "../context/SocketProvider";
+import { Button } from "@material-tailwind/react";
 
 const RoomPage = () => {
   const socket = useSocket();
+  const [roomId, setRoomId] = useState(localStorage.getItem("roomId") || null);
   const [remoteSocketId, setRemoteSocketId] = useState(null);
   const [myStream, setMyStream] = useState();
   const [remoteStream, setRemoteStream] = useState();
@@ -79,12 +81,46 @@ const RoomPage = () => {
   }, []);
 
   useEffect(() => {
-    peer.peer.addEventListener("track", async (ev) => {
-      const remoteStream = ev.streams;
-      console.log("GOT TRACKS!!");
-      setRemoteStream(remoteStream[0]);
-    });
+    peer.peer.addEventListener("track", handleTrack);
+    return () => {
+      peer.peer.removeEventListener("track", handleTrack);
+    };
   }, []);
+
+  const handleDisconnect = () => {
+    // Notify other users about the disconnection
+    socket.emit("user:disconnect");
+
+    // Close the Peer connection and remove the stream
+    peer.peer.close();
+    setMyStream(null);
+    setRemoteStream(null);
+    setRemoteSocketId(null);
+  };
+
+  const handleReconnect = async () => {
+    try {
+      // Re-initialize Peer connection
+      peer.init();
+
+      // Get new offer
+      const offer = await peer.getOffer();
+
+      // Emit 'user:call' event with the new offer if remoteSocketId exists
+      if (remoteSocketId) {
+        socket.emit("user:call", { to: remoteSocketId, offer });
+      }
+
+    } catch (error) {
+      console.error("Error reconnecting:", error);
+    }
+  };
+
+  const handleTrack = async (ev) => {
+    const remoteStream = ev.streams;
+    console.log("GOT TRACKS!!");
+    setRemoteStream(remoteStream[0]);
+  };
 
   useEffect(() => {
     socket.on("user:joined", handleUserJoined);
@@ -93,12 +129,20 @@ const RoomPage = () => {
     socket.on("peer:nego:needed", handleNegoNeedIncomming);
     socket.on("peer:nego:final", handleNegoNeedFinal);
 
+    // Handle user disconnect event
+    socket.on("user:disconnect", () => {
+      setMyStream(null);
+      setRemoteStream(null);
+      setRemoteSocketId(null);
+    });
+
     return () => {
       socket.off("user:joined", handleUserJoined);
       socket.off("incomming:call", handleIncommingCall);
       socket.off("call:accepted", handleCallAccepted);
       socket.off("peer:nego:needed", handleNegoNeedIncomming);
       socket.off("peer:nego:final", handleNegoNeedFinal);
+      socket.off("user:disconnect");
     };
   }, [
     socket,
@@ -111,34 +155,43 @@ const RoomPage = () => {
 
   return (
     <div>
-      <h1>Room Page</h1>
-      <h4>{remoteSocketId ? "Connected" : "No one in room"}</h4>
-      {myStream && <button onClick={sendStreams}>Send Stream</button>}
-      {remoteSocketId && <button onClick={handleCallUser}>CALL</button>}
-      {myStream && (
-        <>
-          <h1>My Stream</h1>
-          <ReactPlayer
-            playing
-            muted
-            height="100px"
-            width="200px"
-            url={myStream}
-          />
-        </>
+      <p color="blue-gray" className="flex justify-center m-auto mt-10 text-4xl gap-1 mb-8">
+        Welcome to <span className=" text-pink-400 font-light">DevXMeet</span>
+      </p>
+      <h4 className=" text-xl">{remoteSocketId ? "Connected" : "No one in room"}</h4>
+      {myStream && <Button className=" my-4" onClick={sendStreams}>Send Stream</Button>}
+      {remoteSocketId ? (
+        <Button className=" my-4 mx-6" onClick={handleDisconnect}>Disconnect</Button>
+      ) : (
+        <Button className=" my-4 mx-6" onClick={handleReconnect}>Reconnect</Button>
       )}
-      {remoteStream && (
-        <>
-          <h1>Remote Stream</h1>
-          <ReactPlayer
-            playing
-            muted
-            height="100px"
-            width="200px"
-            url={remoteStream}
-          />
-        </>
-      )}
+      {remoteSocketId && <Button className=" my-4 mx-6" onClick={handleCallUser}>CALL</Button>}
+      <div className="flex ">
+        {myStream && (
+          <>
+            {/* <h1 className=" flex flex-col">My Stream</h1> */}
+            <ReactPlayer
+              playing
+              muted
+              // height="100px"
+              // width="200px"
+              url={myStream}
+            />
+          </>
+        )}
+        {remoteStream && (
+          <>
+            {/* <h1>Remote Stream</h1> */}
+            <ReactPlayer
+              playing
+              muted
+              // height="100px"
+              // width="200px"
+              url={remoteStream}
+            />
+          </>
+        )}
+      </div>
     </div>
   );
 };
