@@ -15,7 +15,7 @@ export const useSocket = () => {
 
 export const SocketProvider = (props) => {
   // here useMemo is used so that the socket is not created again and again
-  const socket = useMemo(() => io("localhost:8000"), []); // here we are creating a socket connection to the server and port is the port on which the server is running (socket server)
+  const socket = useMemo(() => io("https://devxmeet-advance.onrender.com"), []); // here we are creating a socket connection to the server and port is the port on which the server is running (socket server)
 
   return (
     <SocketContext.Provider value={socket}>
